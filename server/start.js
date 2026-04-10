@@ -1,4 +1,4 @@
-require('dotenv').config({ path: '../.env' });
+require('dotenv').config();
 const { exec } = require('child_process');
 const twilio = require('twilio');
 const ngrok = require('@ngrok/ngrok');
