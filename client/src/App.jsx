@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Phone, Send, User, MessageCircle, Mic, PhoneOff, PhoneCall, Zap, Users, Component, Plus, UploadCloud, CheckCircle, AlertTriangle, Trash2, LogOut } from 'lucide-react';
+import { Phone, Send, User, MessageCircle, Mic, PhoneOff, PhoneCall, Zap, Users, Component, Plus, UploadCloud, CheckCircle, AlertTriangle, Trash2, LogOut, ArrowLeft } from 'lucide-react';
 import { Device } from '@twilio/voice-sdk';
 import { supabase } from './supabaseClient';
 import Login from './Login';
@@ -139,69 +139,80 @@ function WorkspaceApp({ session, accessToken }) {
   };
 
   return (
-    <div className="flex h-screen bg-[#0b141a] text-white font-sans overflow-hidden">
+    <div className="flex flex-col md:flex-row h-[100dvh] bg-[#0b141a] text-white font-sans overflow-hidden">
       {/* GLOBAL CALL BANNER OVERLAY */}
       {activeCall && (
-        <div className="absolute top-0 left-0 right-0 z-50 bg-emerald-900/95 backdrop-blur border-b border-emerald-500 p-4 px-6 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
-          <div className="flex items-center gap-4">
-            <div className="animate-pulse bg-emerald-500 p-3 rounded-full"><Mic size={22} className="text-white" /></div>
+        <div className="absolute top-0 left-0 right-0 z-50 bg-emerald-900/95 backdrop-blur border-b border-emerald-500 p-3 px-4 md:p-4 md:px-6 flex justify-between items-center shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+          <div className="flex items-center gap-3">
+            <div className="animate-pulse bg-emerald-500 p-2.5 rounded-full"><Mic size={18} className="text-white" /></div>
             <div>
-              <h3 className="text-emerald-50 text-lg font-bold tracking-wide">{callStatus === 'incoming' ? 'Incoming Call...' : 'Active Call'}</h3>
-              <p className="text-sm text-emerald-300 font-mono">{activeCall.customParameters?.get('From') || 'Direct Connection'}</p>
+              <h3 className="text-emerald-50 text-sm md:text-lg font-bold tracking-wide">{callStatus === 'incoming' ? 'Incoming Call...' : 'Active Call'}</h3>
+              <p className="text-xs text-emerald-300 font-mono">{activeCall.customParameters?.get('From') || 'Direct Connection'}</p>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             {callStatus === 'incoming' && (
-              <button onClick={acceptCall} className="bg-green-500 hover:bg-green-400 text-green-950 px-8 py-3 rounded-full font-extrabold flex items-center gap-2 transition-transform hover:scale-105">
-                <Phone size={20} className="fill-current" /> Answer
+              <button onClick={acceptCall} className="bg-green-500 hover:bg-green-400 active:scale-95 text-green-950 px-4 md:px-8 py-2 md:py-3 rounded-full font-extrabold flex items-center gap-1.5 text-sm transition-transform">
+                <Phone size={16} className="fill-current" /> Answer
               </button>
             )}
-            <button onClick={endCall} className="bg-rose-600 hover:bg-rose-500 text-white px-8 py-3 rounded-full font-bold flex items-center gap-2 transition-transform hover:scale-105">
-              <PhoneOff size={20} /> {callStatus === 'incoming' ? 'Decline' : 'End Call'}
+            <button onClick={endCall} className="bg-rose-600 hover:bg-rose-500 active:scale-95 text-white px-4 md:px-8 py-2 md:py-3 rounded-full font-bold flex items-center gap-1.5 text-sm transition-transform">
+              <PhoneOff size={16} /> {callStatus === 'incoming' ? 'Decline' : 'End'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Main Global Sidebar */}
-      <div className="w-20 bg-[#111b21] flex flex-col items-center py-6 gap-8 border-r border-[#222d34] flex-shrink-0 z-40">
+      {/* DESKTOP LEFT SIDEBAR — hidden on mobile */}
+      <div className="hidden md:flex w-20 bg-[#111b21] flex-col items-center py-6 gap-8 border-r border-[#222d34] flex-shrink-0 z-40">
         <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-3 rounded-xl shadow-lg shadow-blue-500/20">
           <Zap className="text-white" size={24} />
         </div>
-        
         <nav className="flex flex-col gap-4 w-full pt-4">
-          <button onClick={() => setActiveTab('inbox')} title="Inbox" className={`flex justify-center p-3 w-full border-l-2 transition-all group ${activeTab==='inbox'?'border-blue-500 text-blue-400 bg-blue-500/5':'border-transparent text-neutral-500 hover:text-neutral-300'}`}>
-            <MessageCircle size={26} className="group-hover:scale-110 transition-transform" />
-          </button>
-          <button onClick={() => setActiveTab('leads')} title="Contacts & Leads" className={`flex justify-center p-3 w-full border-l-2 transition-all group ${activeTab==='leads'?'border-blue-500 text-blue-400 bg-blue-500/5':'border-transparent text-neutral-500 hover:text-neutral-300'}`}>
-            <Users size={26} className="group-hover:scale-110 transition-transform" />
-          </button>
-          <button onClick={() => setActiveTab('campaigns')} title="Campaigns" className={`flex justify-center p-3 w-full border-l-2 transition-all group ${activeTab==='campaigns'?'border-blue-500 text-blue-400 bg-blue-500/5':'border-transparent text-neutral-500 hover:text-neutral-300'}`}>
-            <Component size={26} className="group-hover:scale-110 transition-transform" />
-          </button>
-          {role === 'admin' && (
-            <button onClick={() => setActiveTab('admin')} title="Admin & Security" className={`flex justify-center p-3 w-full border-l-2 transition-all group ${activeTab==='admin'?'border-purple-500 text-purple-400 bg-purple-500/5':'border-transparent text-neutral-500 hover:text-neutral-300'}`}>
-              <User size={26} className="group-hover:scale-110 transition-transform" />
+          {[
+            { tab: 'inbox', icon: MessageCircle, label: 'Inbox' },
+            { tab: 'leads', icon: Users, label: 'Leads' },
+            { tab: 'campaigns', icon: Component, label: 'Campaigns' },
+            ...(role === 'admin' ? [{ tab: 'admin', icon: User, label: 'Admin' }] : []),
+          ].map(({ tab, icon: Icon, label }) => (
+            <button key={tab} onClick={() => setActiveTab(tab)} title={label}
+              className={`flex justify-center p-3 w-full border-l-2 transition-all group ${activeTab === tab ? (tab === 'admin' ? 'border-purple-500 text-purple-400 bg-purple-500/5' : 'border-blue-500 text-blue-400 bg-blue-500/5') : 'border-transparent text-neutral-500 hover:text-neutral-300'}`}>
+              <Icon size={26} className="group-hover:scale-110 transition-transform" />
             </button>
-          )}
+          ))}
         </nav>
-
-        {/* Logout at the very bottom */}
-        <button
-          onClick={() => supabase.auth.signOut()}
-          title="Log Out"
-          className="mt-auto flex justify-center p-3 w-full border-l-2 border-transparent text-neutral-600 hover:text-rose-400 hover:border-rose-500 transition-all group"
-        >
+        <button onClick={() => supabase.auth.signOut()} title="Log Out"
+          className="mt-auto flex justify-center p-3 w-full border-l-2 border-transparent text-neutral-600 hover:text-rose-400 hover:border-rose-500 transition-all group">
           <LogOut size={22} className="group-hover:scale-110 transition-transform" />
         </button>
       </div>
 
-      {/* RENDER ACTIVE TAB COMPONENT */}
-      <div className={`flex-1 flex overflow-hidden ${(activeCall && activeTab !== 'campaigns') ? 'pt-[88px]' : ''}`}>
+      {/* MAIN CONTENT AREA */}
+      <div className={`flex-1 flex overflow-hidden ${activeCall ? 'pt-[68px] md:pt-[88px]' : ''}`}>
         {activeTab === 'inbox' && <InboxTab senders={senders} callStatus={callStatus} makeCall={makeCall} />}
         {activeTab === 'admin' && role === 'admin' && <AdminTab />}
         {activeTab === 'leads' && <LeadsTab />}
         {activeTab === 'campaigns' && <CampaignsTab senders={senders} />}
+      </div>
+
+      {/* MOBILE BOTTOM NAV — visible only on mobile */}
+      <div className="md:hidden flex-shrink-0 bg-[#111b21] border-t border-[#222d34] flex items-center justify-around px-1 pt-2 pb-4 z-40">
+        {[
+          { tab: 'inbox', icon: MessageCircle, label: 'Inbox' },
+          { tab: 'leads', icon: Users, label: 'Leads' },
+          { tab: 'campaigns', icon: Component, label: 'Flows' },
+          ...(role === 'admin' ? [{ tab: 'admin', icon: User, label: 'Admin' }] : []),
+          { tab: '__logout__', icon: LogOut, label: 'Logout' },
+        ].map(({ tab, icon: Icon, label }) => (
+          <button key={tab}
+            onClick={() => tab === '__logout__' ? supabase.auth.signOut() : setActiveTab(tab)}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all active:scale-95 ${
+              activeTab === tab ? 'text-blue-400' : 'text-neutral-500'
+            }`}>
+            <Icon size={22} />
+            <span className="text-[10px] font-semibold tracking-wide">{label}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -282,8 +293,9 @@ const InboxTab = ({ senders, callStatus, makeCall }) => {
   };
 
   return (
-    <>
-      <div className="w-80 bg-[#111b21] border-r border-[#222d34] flex flex-col relative z-20">
+    <div className="flex-1 flex overflow-hidden">
+      {/* CONTACT LIST — hidden on mobile when a contact is selected */}
+      <div className={`${selectedContact ? 'hidden md:flex' : 'flex'} w-full md:w-80 bg-[#111b21] border-r border-[#222d34] flex-col relative z-20`}>
         <div className="p-4 border-b border-[#222d34] flex justify-between items-center">
           <h1 className="text-lg font-bold text-neutral-100 flex items-center gap-2"><MessageCircle size={20} className="text-blue-500"/> Inbox</h1>
           <button onClick={() => setShowDialer(!showDialer)} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 p-2 rounded-full transition shadow h-8 w-8 flex items-center justify-center"><Plus size={16} /></button>
@@ -291,78 +303,90 @@ const InboxTab = ({ senders, callStatus, makeCall }) => {
         
         <div className="flex-1 overflow-y-auto">
           {contacts.map(c => (
-            <div key={c.id} onClick={() => selectContact(c)} className={`p-4 border-b border-[#2a3942]/40 cursor-pointer hover:bg-[#202c33] transition ${selectedContact?.id === c.id ? 'bg-[#2a3942] border-l-4 border-l-blue-500' : ''}`}>
+            <div key={c.id} onClick={() => selectContact(c)} className={`p-4 border-b border-[#2a3942]/40 cursor-pointer active:bg-[#202c33] hover:bg-[#202c33] transition ${selectedContact?.id === c.id ? 'bg-[#2a3942] border-l-4 border-l-blue-500' : ''}`}>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-neutral-800 rounded-full flex items-center justify-center flex-shrink-0 text-neutral-400"><User size={20} /></div>
+                <div className="w-11 h-11 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
+                  <User size={20} className="text-white" />
+                </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-baseline mb-1">
-                    <h3 className="font-medium text-neutral-200 truncate">{c.name || c.phone_number}</h3>
-                    <span className="text-[10px] text-neutral-500">{new Date(c.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                  <div className="flex justify-between items-baseline mb-0.5">
+                    <h3 className="font-semibold text-neutral-100 truncate text-sm">{c.name || c.phone_number}</h3>
+                    <span className="text-[10px] text-neutral-500 flex-shrink-0 ml-2">{new Date(c.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   </div>
                   <p className="text-xs text-neutral-400 truncate">{c.last_message}</p>
                 </div>
               </div>
             </div>
           ))}
-          {contacts.length === 0 && <div className="p-8 text-center text-neutral-600 text-sm">No active conversions.</div>}
+          {contacts.length === 0 && <div className="p-8 text-center text-neutral-600 text-sm">No active conversations.</div>}
         </div>
         
         {showDialer && (
           <div className="absolute inset-0 bg-[#111b21]/95 backdrop-blur-sm z-30 flex flex-col p-6 animate-in slide-in-from-bottom-2 duration-200">
-             <div className="flex justify-between items-center mb-8">
-                 <h3 className="font-medium text-neutral-300">New Chat</h3>
-                 <button onClick={() => setShowDialer(false)} className="text-neutral-500 hover:text-white p-2">&times;</button>
-             </div>
-             <form onSubmit={handleStartConversation} className="flex flex-col gap-4">
-               <input autoFocus type="text" placeholder="+1..." value={newNumberDial} onChange={e => setNewNumberDial(e.target.value)} className="p-3 bg-[#202c33] border border-[#2a3942] rounded-xl outline-none text-white focus:border-blue-500 font-mono text-center text-lg shadow-inner" />
-               <button type="submit" disabled={!newNumberDial} className="bg-blue-600 disabled:opacity-50 text-white rounded-xl p-3 font-semibold flex items-center justify-center gap-2 mt-2"><MessageCircle size={18} /> Start Chat</button>
-             </form>
+            <div className="flex justify-between items-center mb-8">
+              <h3 className="font-medium text-neutral-300">New Chat</h3>
+              <button onClick={() => setShowDialer(false)} className="text-neutral-500 hover:text-white p-2">&times;</button>
+            </div>
+            <form onSubmit={handleStartConversation} className="flex flex-col gap-4">
+              <input autoFocus type="text" placeholder="+1..." value={newNumberDial} onChange={e => setNewNumberDial(e.target.value)} className="p-3 bg-[#202c33] border border-[#2a3942] rounded-xl outline-none text-white focus:border-blue-500 font-mono text-center text-lg shadow-inner" />
+              <button type="submit" disabled={!newNumberDial} className="bg-blue-600 disabled:opacity-50 text-white rounded-xl p-3 font-semibold flex items-center justify-center gap-2 mt-2"><MessageCircle size={18} /> Start Chat</button>
+            </form>
           </div>
         )}
       </div>
 
-      <div className="flex-1 flex flex-col bg-[#0b141a] relative bg-[url('https://www.transparenttextures.com/patterns/cartographer.png')] bg-blend-overlay">
+      {/* CHAT PANEL — full screen on mobile, right pane on desktop */}
+      <div className={`${selectedContact ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-[#0b141a] relative bg-[url('https://www.transparenttextures.com/patterns/cartographer.png')] bg-blend-overlay`}>
         {selectedContact ? (
           <>
-            <div className={`bg-[#202c33] p-4 px-6 border-b border-[#2a3942] flex justify-between items-center z-10 shadow-sm`}>
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-neutral-800 text-neutral-400 rounded-full flex items-center justify-center text-xl"><User size={24} /></div>
+            {/* Chat Header */}
+            <div className="bg-[#202c33] p-3 md:p-4 px-4 md:px-6 border-b border-[#2a3942] flex justify-between items-center z-10 shadow-sm">
+              <div className="flex items-center gap-3">
+                {/* Mobile back button */}
+                <button onClick={() => setSelectedContact(null)} className="md:hidden p-1.5 -ml-1 text-neutral-400 hover:text-white transition active:scale-95">
+                  <ArrowLeft size={22} />
+                </button>
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-full flex items-center justify-center shadow-md flex-shrink-0">
+                  <User size={20} className="text-white" />
+                </div>
                 <div>
-                  <h2 className="text-lg font-bold text-neutral-50">{selectedContact.name || selectedContact.phone_number}</h2>
-                  <div className="flex items-center gap-2 mt-0.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_#10b981]"></span>
-                      <p className="text-[10px] font-medium text-neutral-400 capitalize tracking-wide">
-                        {selectedContact.assigned_sender_number ? `Locked to ${selectedContact.assigned_sender_number}` : 'No Sticky Assigned'}
-                      </p>
+                  <h2 className="text-base md:text-lg font-bold text-neutral-50 truncate max-w-[160px] md:max-w-none">{selectedContact.name || selectedContact.phone_number}</h2>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_5px_#10b981]"></span>
+                    <p className="text-[10px] font-medium text-neutral-400 capitalize tracking-wide">
+                      {selectedContact.assigned_sender_number ? `Locked to ${selectedContact.assigned_sender_number}` : 'No Sticky Assigned'}
+                    </p>
                   </div>
                 </div>
               </div>
               <div className="flex gap-2">
-                 <button onClick={() => handleDelete(selectedContact.id)} disabled={selectedContact.id === 'temp'} className="p-2.5 rounded-full flex items-center justify-center transition shadow-md bg-rose-600/20 hover:bg-rose-500 text-rose-500 hover:text-white disabled:opacity-50">
-                    <Trash2 size={16} />
-                 </button>
-                 <button onClick={() => makeCall(selectedContact.phone_number)} disabled={callStatus !== 'ready'} className={`p-2.5 px-6 rounded-full flex items-center gap-2 transition font-medium shadow-md ${callStatus === 'ready' ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-neutral-800 text-neutral-600 cursor-not-allowed'}`}>
-                   <Phone size={16} className="fill-current opacity-80" /> <span className="text-sm">{callStatus === 'initializing' ? 'Connecting...' : 'Call'}</span>
-                 </button>
+                <button onClick={() => handleDelete(selectedContact.id)} disabled={selectedContact.id === 'temp'} className="p-2 rounded-full transition bg-rose-600/20 hover:bg-rose-500 text-rose-500 hover:text-white disabled:opacity-50 active:scale-95">
+                  <Trash2 size={15} />
+                </button>
+                <button onClick={() => makeCall(selectedContact.phone_number)} disabled={callStatus !== 'ready'} className={`p-2 px-4 md:px-6 rounded-full flex items-center gap-1.5 transition font-medium shadow-md active:scale-95 text-sm ${callStatus === 'ready' ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-neutral-800 text-neutral-600 cursor-not-allowed'}`}>
+                  <Phone size={15} className="fill-current opacity-80" />
+                  <span className="hidden sm:inline">{callStatus === 'initializing' ? 'Connecting...' : 'Call'}</span>
+                </button>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 relative z-10">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 relative z-10">
               {messages.map(msg => {
                 const isOut = msg.direction === 'outbound';
                 return (
                   <div key={msg.id} className={`flex relative z-10 ${isOut ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[75%] rounded-xl px-4 py-2.5 shadow text-[14.5px] leading-relaxed ${isOut ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none' : 'bg-[#202c33] text-[#e9edef] rounded-tl-none'}`}>
+                    <div className={`max-w-[82%] md:max-w-[75%] rounded-xl px-4 py-2.5 shadow text-[14px] leading-relaxed ${isOut ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none' : 'bg-[#202c33] text-[#e9edef] rounded-tl-none'}`}>
                       {msg.type === 'call' && (
-                         <div className="mb-2 p-2 bg-[#111b21]/50 rounded-lg border border-neutral-700/50 flex flex-col gap-2">
-                            <div className="flex items-center gap-2 text-blue-400 font-bold text-xs"><PhoneCall size={14} /> {msg.direction === 'inbound' ? 'Incoming' : 'Outgoing'} Call</div>
-                            {msg.recording_url && <audio controls controlsList="nodownload" src={`${API_BASE}/recordings?url=${encodeURIComponent(msg.recording_url)}`} className="h-8 max-w-[200px]" />}
-                         </div>
+                        <div className="mb-2 p-2 bg-[#111b21]/50 rounded-lg border border-neutral-700/50 flex flex-col gap-2">
+                          <div className="flex items-center gap-2 text-blue-400 font-bold text-xs"><PhoneCall size={14} /> {msg.direction === 'inbound' ? 'Incoming' : 'Outgoing'} Call</div>
+                          {msg.recording_url && <audio controls controlsList="nodownload" src={`${API_BASE}/recordings?url=${encodeURIComponent(msg.recording_url)}`} className="h-8 max-w-[200px]" />}
+                        </div>
                       )}
                       {msg.type !== 'call' && <p className="whitespace-pre-wrap">{msg.content}</p>}
                       {msg.type === 'call' && !msg.recording_url && <p className="whitespace-pre-wrap italic opacity-80">{msg.content}</p>}
                       <div className="flex justify-end items-center mt-1 opacity-60">
-                         <span className="text-[9px] uppercase">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <span className="text-[9px] uppercase">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                       </div>
                     </div>
                   </div>
@@ -371,47 +395,48 @@ const InboxTab = ({ senders, callStatus, makeCall }) => {
               <div ref={messagesEndRef} className="h-4" />
             </div>
 
-            <div className="p-4 px-6 bg-[#202c33] border-t border-[#2a3942] z-10 flex flex-col gap-2">
+            {/* Message Input */}
+            <div className="p-3 md:p-4 px-4 md:px-6 bg-[#202c33] border-t border-[#2a3942] z-10 flex flex-col gap-2">
               {showOverrideWarning && (
-                  <div className="bg-rose-900/30 border border-rose-500/50 p-3 rounded-xl flex items-center justify-between shadow-lg mb-2 animate-in fade-in slide-in-from-bottom-2">
-                     <div className="flex items-center gap-3">
-                         <AlertTriangle className="text-rose-400" size={20} />
-                         <div>
-                             <p className="text-sm font-semibold text-rose-100">Sticky Override Warning!</p>
-                             <p className="text-xs text-rose-300">You are changing the "From" number from this lead's permanently assigned sender. Changing this will break thread continuity.</p>
-                         </div>
-                     </div>
-                     <div className="flex gap-2">
-                        <button onClick={() => setShowOverrideWarning(false)} className="text-xs bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-lg text-white">Cancel</button>
-                        <button onClick={handleSend} className="text-xs bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded-lg text-white font-semibold">Yes, Override</button>
-                     </div>
+                <div className="bg-rose-900/30 border border-rose-500/50 p-3 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg mb-1 animate-in fade-in slide-in-from-bottom-2">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="text-rose-400 flex-shrink-0 mt-0.5" size={18} />
+                    <div>
+                      <p className="text-sm font-semibold text-rose-100">Sticky Override Warning!</p>
+                      <p className="text-xs text-rose-300">Changing the "From" number will break thread continuity.</p>
+                    </div>
                   </div>
+                  <div className="flex gap-2 self-end sm:self-auto">
+                    <button onClick={() => setShowOverrideWarning(false)} className="text-xs bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-lg text-white">Cancel</button>
+                    <button onClick={handleSend} className="text-xs bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded-lg text-white font-semibold">Yes, Override</button>
+                  </div>
+                </div>
               )}
-              
               <div className="flex justify-between items-center px-1 mb-1">
-                 <p className="text-xs text-neutral-500 tracking-wide font-semibold uppercase">Reply using channel:</p>
-                 <select 
-                    value={overrideSender || selectedContact.assigned_sender_number || senders[0]?.phone_number} 
-                    onChange={e => setOverrideSender(e.target.value)}
-                    className="bg-[#2a3942] text-xs text-blue-300 px-3 py-1 rounded outline-none border border-[#111b21]"
-                 >
-                    {senders.map(s => <option key={s.id} value={s.phone_number}>{s.name || s.phone_number}</option>)}
-                 </select>
+                <p className="text-xs text-neutral-500 tracking-wide font-semibold uppercase">Reply using:</p>
+                <select
+                  value={overrideSender || selectedContact.assigned_sender_number || senders[0]?.phone_number}
+                  onChange={e => setOverrideSender(e.target.value)}
+                  className="bg-[#2a3942] text-xs text-blue-300 px-3 py-1 rounded outline-none border border-[#111b21] max-w-[160px] truncate">
+                  {senders.map(s => <option key={s.id} value={s.phone_number}>{s.name || s.phone_number}</option>)}
+                </select>
               </div>
-              <form onSubmit={handleSend} className="max-w-5xl w-full mx-auto flex gap-3">
-                <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder="Type a message..." className="flex-1 bg-[#2a3942] border border-[#111b21] rounded-xl px-5 py-3.5 text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition placeholder:text-neutral-500" />
-                <button type="submit" disabled={!messageInput.trim()} className="bg-emerald-600 disabled:bg-neutral-800 disabled:text-neutral-600 text-white w-14 rounded-xl flex items-center justify-center transition-all shadow hover:bg-emerald-500 group"><Send size={20} className="ml-1 group-disabled:opacity-50" /></button>
+              <form onSubmit={handleSend} className="flex gap-2">
+                <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} placeholder="Type a message..." className="flex-1 bg-[#2a3942] border border-[#111b21] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition placeholder:text-neutral-500 text-sm" />
+                <button type="submit" disabled={!messageInput.trim()} className="bg-emerald-600 disabled:bg-neutral-800 disabled:text-neutral-600 text-white w-12 rounded-xl flex items-center justify-center transition-all shadow hover:bg-emerald-500 active:scale-95 group">
+                  <Send size={18} className="ml-0.5 group-disabled:opacity-50" />
+                </button>
               </form>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center flex-col text-neutral-600 p-8 z-10 backdrop-blur-sm">
-             <MessageCircle size={56} className="text-neutral-800 drop-shadow-md mb-4" strokeWidth={1} />
-             <p className="max-w-xs text-center text-sm font-medium">Select a chat to view sticky threads or start a fresh connection.</p>
+          <div className="flex-1 flex items-center justify-center flex-col text-neutral-600 p-8 z-10">
+            <MessageCircle size={56} className="text-neutral-800 drop-shadow-md mb-4" strokeWidth={1} />
+            <p className="max-w-xs text-center text-sm font-medium">Select a chat to view threads or start a fresh connection.</p>
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 };
 
