@@ -262,6 +262,8 @@ app.post('/api/webhooks/outbound-call', async (req, res) => {
     const dial = twiml.dial({ 
       callerId, 
       answerOnBridge: true,
+      record: 'record-from-ringing',
+      recordingStatusCallback: `https://${req.get('host')}/api/webhooks/recording-ready`,
       action: `https://${req.get('host')}/api/webhooks/call-ended?direction=outbound&target=${encodeURIComponent(targetNumber)}`
     });
     dial.number(targetNumber);
@@ -297,6 +299,8 @@ app.post('/api/webhooks/incoming-call', async (req, res) => {
       const dial = twiml.dial({ 
         timeout: 30, 
         answerOnBridge: true,
+        record: 'record-from-ringing',
+        recordingStatusCallback: `https://${req.get('host')}/api/webhooks/recording-ready`,
         action: `https://${req.get('host')}/api/webhooks/call-ended?direction=inbound&target=${encodeURIComponent(cleanTo)}&userId=${encodeURIComponent(phoneMatch?.user_id || '')}`
       });
       dial.client(clientIdentity);
@@ -313,7 +317,7 @@ app.post('/api/webhooks/incoming-call', async (req, res) => {
 // Logs the call to the conversation board once it's finished or missed
 app.post('/api/webhooks/call-ended', async (req, res) => {
   const { direction, target, userId } = req.query;
-  const { DialCallStatus, DialCallDuration, From } = req.body;
+  const { DialCallStatus, DialCallDuration, From, RecordingUrl } = req.body;
   const cleanFrom = (From || '').replace(/[^\d+]/g, '');
   let phoneStr = cleanFrom;
   if (phoneStr && !phoneStr.startsWith('+')) phoneStr = '+' + phoneStr;
@@ -355,7 +359,8 @@ app.post('/api/webhooks/call-ended', async (req, res) => {
          direction,
          type: 'call',
          content: msgContent,
-         status: DialCallStatus || 'failed'
+         status: DialCallStatus || 'failed',
+         recording_url: RecordingUrl || null
        }]);
     }
   }
@@ -363,6 +368,44 @@ app.post('/api/webhooks/call-ended', async (req, res) => {
   // Twilio needs an empty TwiML response to close the action hook gracefully
   const twiml = new twilio.twiml.VoiceResponse();
   res.type('text/xml').send(twiml.toString());
+});
+
+// Called by Twilio asynchronously once the recording is fully processed and ready
+app.post('/api/webhooks/recording-ready', async (req, res) => {
+  const { CallSid, RecordingUrl, RecordingSid } = req.body;
+  if (!CallSid || !RecordingUrl) return res.sendStatus(200);
+  // Find the call message by matching on the recording SID pattern and update recording_url
+  // Twilio sends this webhook after call-ended, so we update the most recent call message for this call
+  const fullUrl = `${RecordingUrl}.mp3`;
+  await db.from('messages')
+    .update({ recording_url: fullUrl })
+    .eq('type', 'call')
+    .is('recording_url', null)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  console.log(`🎙️ Recording ready: ${fullUrl}`);
+  res.sendStatus(200);
+});
+
+// Secure proxy: streams Twilio recording audio through the server so the browser
+// doesn't need Twilio credentials directly
+app.get('/api/recordings', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).send('Missing url');
+  try {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    const response = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
+    if (!response.ok) return res.status(response.status).send('Recording not available');
+    res.set('Content-Type', response.headers.get('content-type') || 'audio/mpeg');
+    res.set('Cache-Control', 'private, max-age=3600');
+    const { Readable } = require('stream');
+    Readable.fromWeb(response.body).pipe(res);
+  } catch(err) {
+    console.error('Recording proxy error:', err);
+    res.status(500).send('Error fetching recording');
+  }
 });
 
 // -- TWILIO WEBHOOKS SMS (Public) --
