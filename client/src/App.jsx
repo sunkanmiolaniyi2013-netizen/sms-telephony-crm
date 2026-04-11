@@ -723,53 +723,58 @@ const AdminTab = () => {
     };
 
     return (
-        <div className="flex-1 overflow-y-auto p-10 bg-[#0b141a] space-y-8 relative">
-            <div className="flex justify-between items-center">
-                <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">Admin Security & Dashboard</h1>
-                <button onClick={()=>setShowInvite(true)} className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-6 py-2.5 rounded-lg font-bold shadow-[0_0_20px_rgba(147,51,234,0.4)] transition flex items-center gap-2">
-                    <User size={18} /> Invite Agent
+        <div className="flex-1 overflow-y-auto p-4 md:p-10 bg-[#0b141a] space-y-6 relative">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                <h1 className="text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500">Admin Dashboard</h1>
+                <button onClick={()=>setShowInvite(true)} className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-5 py-2.5 rounded-lg font-bold shadow-[0_0_20px_rgba(147,51,234,0.4)] transition flex items-center gap-2 self-start sm:self-auto active:scale-95">
+                    <User size={16} /> Invite Agent
                 </button>
             </div>
             
-            <div className="bg-[#111b21] border border-[#222d34] rounded-2xl p-6 shadow-xl relative overflow-hidden">
-                <h2 className="text-xl font-bold text-neutral-100 mb-6 flex items-center gap-2"><User className="text-purple-400"/> Authorized Agents</h2>
-                <div className="space-y-4">
+            <div className="bg-[#111b21] border border-[#222d34] rounded-2xl p-4 md:p-6 shadow-xl">
+                <h2 className="text-lg font-bold text-neutral-100 mb-4 flex items-center gap-2"><User className="text-purple-400" size={18}/> Authorized Agents</h2>
+                <div className="space-y-3">
                     {users.map(u => (
-                        <div key={u.id} className="flex justify-between items-center bg-[#0b141a] p-5 rounded-xl border border-[#222d34] hover:border-purple-500/30 transition">
-                            <div>
-                                <p className="font-bold text-neutral-200">{u.email} <span className={`text-[10px] ml-2 px-2 py-0.5 rounded-full uppercase tracking-wider ${u.role==='admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>{u.role}</span></p>
-                                <p className="text-xs text-neutral-500 mt-1 font-mono">{u.id}</p>
-                                <div className="mt-3 text-sm text-emerald-400 flex flex-wrap gap-2">
-                                    {(u.user_phone_numbers || []).map(p => <span key={p.phone_number} className="bg-[#111b21] px-3 py-1 rounded-md border border-[#222d34] text-xs font-mono">{p.phone_number}</span>)}
-                                    {(u.user_phone_numbers && u.user_phone_numbers.length === 0) && <span className="text-neutral-600 italic text-xs">No Twilio identity assigned</span>}
+                        <div key={u.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-[#0b141a] p-4 rounded-xl border border-[#222d34] hover:border-purple-500/30 transition">
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="font-bold text-neutral-200 text-sm truncate">{u.email}</p>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0 ${u.role==='admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>{u.role}</span>
+                                </div>
+                                <p className="text-[10px] text-neutral-600 mt-1 font-mono truncate">{u.id}</p>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {(u.user_phone_numbers || []).map(p => <span key={p.phone_number} className="bg-[#111b21] px-2 py-0.5 rounded border border-[#222d34] text-xs font-mono text-emerald-400">{p.phone_number}</span>)}
+                                    {(u.user_phone_numbers && u.user_phone_numbers.length === 0) && <span className="text-neutral-600 italic text-xs">No number assigned</span>}
                                 </div>
                             </div>
-                            <button onClick={() => setAssignTarget(u.id)} className="px-5 py-2.5 bg-[#202c33] hover:bg-purple-600 transition tracking-wide hover:shadow-[0_0_20px_rgba(147,51,234,0.4)] rounded-lg text-sm text-neutral-200 font-medium whitespace-nowrap ml-4">Assign Number</button>
+                            <button onClick={() => setAssignTarget(u.id)} className="px-4 py-2 bg-[#202c33] hover:bg-purple-600 transition rounded-lg text-sm text-neutral-200 font-medium whitespace-nowrap active:scale-95 self-start sm:self-auto">Assign Number</button>
                         </div>
                     ))}
                 </div>
             </div>
 
+            {/* Assign Number Modal */}
             {assignTarget && (
-                <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-md">
+                <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-4 backdrop-blur-md">
                     <div className="bg-[#111b21] border border-[#222d34] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-                        <h2 className="text-xl font-bold text-white mb-4">Assign Twilio Number</h2>
-                        <input value={assignNum} onChange={e=>setAssignNum(e.target.value)} placeholder="+1408..." className="w-full bg-[#0b141a] rounded-lg p-4 outline-none text-white focus:ring-2 focus:ring-purple-500 mb-6 border border-[#222d34] font-mono text-lg" />
+                        <h2 className="text-lg font-bold text-white mb-4">Assign Twilio Number</h2>
+                        <input value={assignNum} onChange={e=>setAssignNum(e.target.value)} placeholder="+1408..." className="w-full bg-[#0b141a] rounded-lg p-4 outline-none text-white focus:ring-2 focus:ring-purple-500 mb-5 border border-[#222d34] font-mono" />
                         <div className="flex justify-end gap-3">
                             <button onClick={()=>setAssignTarget(null)} className="px-5 py-2 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 transition">Cancel</button>
-                            <button onClick={handleAssign} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-[0_0_15px_rgba(147,51,234,0.3)] transition">Assign Identity</button>
+                            <button onClick={handleAssign} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-[0_0_15px_rgba(147,51,234,0.3)] transition active:scale-95">Assign</button>
                         </div>
                     </div>
                 </div>
             )}
 
+            {/* Invite Agent Modal */}
             {showInvite && (
-                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
-                    <div className="bg-[#111b21] border border-[#222d34] rounded-2xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden">
+                <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-4 backdrop-blur-md">
+                    <div className="bg-[#111b21] border border-[#222d34] rounded-2xl p-6 w-full max-w-md shadow-2xl relative overflow-hidden">
                         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-blue-500"></div>
-                        <h2 className="text-2xl font-black text-white mb-6 flex items-center gap-2"><User className="text-purple-400" /> Secure Agent Creation</h2>
-                        
-                        <div className="space-y-4 mb-8">
+                        <h2 className="text-xl font-black text-white mb-5 flex items-center gap-2"><User className="text-purple-400" size={20}/> Create Agent</h2>
+                        <div className="space-y-4 mb-6">
                             <div>
                                 <label className="text-xs text-neutral-400 font-bold uppercase tracking-wider block mb-2">Agent Email</label>
                                 <input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="agent@company.com" className="w-full bg-[#0b141a] rounded-lg p-3 outline-none text-white focus:ring-2 focus:ring-purple-500 border border-[#222d34]" />
@@ -779,12 +784,10 @@ const AdminTab = () => {
                                 <input type="password" value={invitePass} onChange={e=>setInvitePass(e.target.value)} placeholder="Minimum 6 characters" className="w-full bg-[#0b141a] rounded-lg p-3 outline-none text-white focus:ring-2 focus:ring-purple-500 border border-[#222d34]" />
                             </div>
                         </div>
-
-                        <p className="text-rose-400 text-sm mb-4 font-bold">{inviteStatus}</p>
-
+                        {inviteStatus && <p className="text-rose-400 text-sm mb-4 font-bold">{inviteStatus}</p>}
                         <div className="flex justify-end gap-3 pt-4 border-t border-[#222d34]">
                             <button onClick={()=>setShowInvite(false)} className="px-5 py-2.5 rounded-lg text-neutral-400 hover:text-white hover:bg-white/5 transition font-medium">Cancel</button>
-                            <button onClick={handleInvite} className="bg-white text-black px-6 py-2.5 rounded-lg font-black hover:bg-neutral-200 transition">Spawn Agent</button>
+                            <button onClick={handleInvite} className="bg-white text-black px-6 py-2.5 rounded-lg font-black hover:bg-neutral-200 transition active:scale-95">Spawn Agent</button>
                         </div>
                     </div>
                 </div>

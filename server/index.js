@@ -27,6 +27,7 @@ const upload = multer({ dest: 'uploads/' });
 // Validates the JWT from the frontend and extracts the underlying user session.
 const authMiddleware = async (req, res, next) => {
   if (req.path.startsWith('/webhooks')) return next();
+  if (req.path.startsWith('/recordings')) return next(); // audio elements can't send auth headers
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'Missing auth header' });
   const token = authHeader.split(' ')[1];
