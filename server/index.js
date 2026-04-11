@@ -354,6 +354,11 @@ app.post('/api/webhooks/call-ended', async (req, res) => {
           ? `📞 ${direction === 'outbound' ? 'Outbound' : 'Inbound'} Call (${DialCallDuration || 0}s)`
           : `❌ Missed Call (${direction === 'outbound' ? 'No Answer' : 'Missed'})`;
           
+         // Only attach recording on completed calls — missed/no-answer calls don't get one
+         const callRecordingUrl = (DialCallStatus === 'completed' && RecordingUrl)
+           ? `${RecordingUrl}.mp3`
+           : null;
+
        await db.from('messages').insert([{
          user_id: actualUserId,
          contact_id,
@@ -361,7 +366,7 @@ app.post('/api/webhooks/call-ended', async (req, res) => {
          type: 'call',
          content: msgContent,
          status: DialCallStatus || 'failed',
-         recording_url: RecordingUrl || null
+         recording_url: callRecordingUrl
        }]);
     }
   }
@@ -371,22 +376,8 @@ app.post('/api/webhooks/call-ended', async (req, res) => {
   res.type('text/xml').send(twiml.toString());
 });
 
-// Called by Twilio asynchronously once the recording is fully processed and ready
-app.post('/api/webhooks/recording-ready', async (req, res) => {
-  const { CallSid, RecordingUrl, RecordingSid } = req.body;
-  if (!CallSid || !RecordingUrl) return res.sendStatus(200);
-  // Find the call message by matching on the recording SID pattern and update recording_url
-  // Twilio sends this webhook after call-ended, so we update the most recent call message for this call
-  const fullUrl = `${RecordingUrl}.mp3`;
-  await db.from('messages')
-    .update({ recording_url: fullUrl })
-    .eq('type', 'call')
-    .is('recording_url', null)
-    .order('created_at', { ascending: false })
-    .limit(1);
-  console.log(`🎙️ Recording ready: ${fullUrl}`);
-  res.sendStatus(200);
-});
+// Note: recording-ready webhook removed — we rely on RecordingUrl from call-ended
+// which is specific to that exact call, preventing cross-contamination of missed calls.
 
 // Secure proxy: streams Twilio recording audio through the server so the browser
 // doesn't need Twilio credentials directly
