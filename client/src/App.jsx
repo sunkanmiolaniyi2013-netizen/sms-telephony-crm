@@ -233,7 +233,18 @@ const InboxTab = ({ senders, callStatus, makeCall }) => {
   const [showDialer, setShowDialer] = useState(false);
   const messagesEndRef = useRef(null);
 
-  useEffect(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages]);
+  const prevMsgCount = useRef(0);
+  const prevContactId = useRef(null);
+
+  useEffect(() => {
+    const isNewContact = prevContactId.current !== selectedContact?.id;
+    const hasNewMsgs = messages.length !== prevMsgCount.current;
+    if (isNewContact || hasNewMsgs) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      prevMsgCount.current = messages.length;
+      prevContactId.current = selectedContact?.id;
+    }
+  }, [messages, selectedContact]);
 
   const loadData = () => {
     authFetch(`${API_BASE}/contacts`).then(r => r.json()).then(data => !data.error && setContacts(data)).catch(()=>{});
