@@ -89,12 +89,13 @@ app.post('/api/messages/send', async (req, res) => {
             user_id: req.user.id,
             phone_number: to,
             last_message: content,
-            assigned_sender_number: fromNumber
+            assigned_sender_number: fromNumber,
+            updated_at: new Date().toISOString()
         }).select('id').single();
         if (error) throw error;
         contactId = newContact?.id;
     } else {
-        await db.from('contacts').update({ last_message: content, assigned_sender_number: fromNumber }).eq('id', contactId);
+        await db.from('contacts').update({ last_message: content, assigned_sender_number: fromNumber, updated_at: new Date().toISOString() }).eq('id', contactId);
     }
 
     if (contactId) {

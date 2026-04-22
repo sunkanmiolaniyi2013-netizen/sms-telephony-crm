@@ -93,6 +93,12 @@ async function executeStepForLead(lead) {
             to: contact.phone_number
         });
 
+        // Update Contact to bump to top of Inbox
+        await db.from('contacts').update({
+            last_message: finalContent,
+            updated_at: new Date().toISOString()
+        }).eq('id', lead.contact_id);
+
         // Insert Outbound SMS to thread
         await db.from('messages').insert({
             user_id: lead.campaigns.user_id,
