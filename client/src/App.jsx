@@ -256,6 +256,83 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
 
   const prevMsgCount = useRef(0);
   const prevContactId = useRef(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
+  // Voicemail Drop state
+  const [showVoicemailPanel, setShowVoicemailPanel] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedBlob, setRecordedBlob] = useState(null);
+  const [recordedUrl, setRecordedUrl] = useState(null);
+  const [savedVoicemails, setSavedVoicemails] = useState([]);
+  const [dropStatus, setDropStatus] = useState(''); // '', 'uploading', 'dropping', 'done', 'error'
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  const playDing = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.4, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.6);
+    } catch(e) {}
+  };
+
+  const fetchSavedVoicemails = () =>
+    authFetch(`${API_BASE}/voicemail/list`).then(r => r.json()).then(d => setSavedVoicemails(Array.isArray(d) ? d : [])).catch(() => {});
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunksRef.current = [];
+      const mr = new MediaRecorder(stream);
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        setRecordedBlob(blob); setRecordedUrl(url);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setIsRecording(true);
+    } catch(e) { alert('Microphone access denied: ' + e.message); }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  };
+
+  const uploadAndDrop = async (vmUrl) => {
+    if (!selectedContact) return;
+    setDropStatus('dropping');
+    const res = await authFetch(`${API_BASE}/voicemail/drop`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: selectedContact.phone_number, voicemail_url: vmUrl }) });
+    const d = await res.json();
+    if (d.error) { setDropStatus('error'); alert('Drop failed: ' + d.error); }
+    else setDropStatus('done');
+  };
+
+  const handleSaveAndDrop = async () => {
+    if (!recordedBlob) return;
+    setDropStatus('uploading');
+    const fd = new FormData();
+    fd.append('audio', recordedBlob, 'voicemail.webm');
+    const res = await authFetch(`${API_BASE}/voicemail/upload`, { method: 'POST', body: fd });
+    const d = await res.json();
+    if (d.error) { setDropStatus('error'); alert('Upload failed: ' + d.error); return; }
+    fetchSavedVoicemails();
+    await uploadAndDrop(d.url);
+  };
+
+  const deleteVoicemail = async (path) => {
+    await authFetch(`${API_BASE}/voicemail/file`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+    fetchSavedVoicemails();
+  };
 
   useEffect(() => {
     const isNewContact = prevContactId.current !== selectedContact?.id;
@@ -268,13 +345,23 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
   }, [messages, selectedContact]);
 
   const loadData = () => {
-    authFetch(`${API_BASE}/contacts`).then(r => r.json()).then(data => !data.error && setContacts(data)).catch(()=>{});
+    authFetch(`${API_BASE}/contacts`).then(r => r.json()).then(data => {
+      if (!data.error) {
+        // SMS Ringtone: detect new inbound messages across all contacts
+        setContacts(prev => {
+          const prevLastMsgs = Object.fromEntries(prev.map(c => [c.id, c.updated_at]));
+          const newInbound = data.some(c => c.id && prevLastMsgs[c.id] && c.updated_at > prevLastMsgs[c.id]);
+          if (newInbound && soundEnabled && prev.length > 0) playDing();
+          return data;
+        });
+      }
+    }).catch(()=>{});
     if (selectedContact?.id && selectedContact.id !== 'temp') {
       authFetch(`${API_BASE}/contacts/${selectedContact.id}/messages`).then(r => r.json()).then(data => !data.error && setMessages(data)).catch(()=>{});
     }
   };
 
-  useEffect(() => { loadData(); const i = setInterval(loadData, 2000); return () => clearInterval(i); }, [selectedContact]);
+  useEffect(() => { loadData(); fetchSavedVoicemails(); const i = setInterval(loadData, 2000); return () => clearInterval(i); }, [selectedContact, soundEnabled]);
 
   const selectContact = (contact) => {
     setSelectedContact(contact);
@@ -336,7 +423,12 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
       <div className={`${selectedContact ? 'hidden md:flex' : 'flex'} w-full md:w-80 bg-[#111b21] border-r border-[#222d34] flex-col relative z-20`}>
         <div className="p-4 border-b border-[#222d34] flex justify-between items-center">
           <h1 className="text-lg font-bold text-neutral-100 flex items-center gap-2"><MessageCircle size={20} className="text-blue-500"/> Inbox</h1>
-          <button onClick={() => setShowDialer(!showDialer)} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 p-2 rounded-full transition shadow h-8 w-8 flex items-center justify-center"><Plus size={16} /></button>
+          <div className="flex gap-2">
+            <button onClick={() => setSoundEnabled(s => !s)} title={soundEnabled ? 'Mute SMS sounds' : 'Enable SMS sounds'} className={`p-2 rounded-full transition text-sm h-8 w-8 flex items-center justify-center ${soundEnabled ? 'bg-emerald-700/30 text-emerald-400 hover:bg-emerald-700/50' : 'bg-neutral-800 text-neutral-500 hover:bg-neutral-700'}`}>
+              {soundEnabled ? '🔔' : '🔕'}
+            </button>
+            <button onClick={() => setShowDialer(!showDialer)} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 p-2 rounded-full transition shadow h-8 w-8 flex items-center justify-center"><Plus size={16} /></button>
+          </div>
         </div>
         
         <div className="flex-1 overflow-y-auto">
@@ -398,6 +490,9 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
                 </div>
               </div>
               <div className="flex gap-2">
+                <button onClick={() => { setShowVoicemailPanel(v => !v); setDropStatus(''); setRecordedBlob(null); setRecordedUrl(null); }} className={`p-2 rounded-full transition active:scale-95 text-sm ${showVoicemailPanel ? 'bg-purple-600 text-white' : 'bg-purple-600/20 hover:bg-purple-600/40 text-purple-400'}`} title="Voicemail Drop">
+                  <Mic size={15} />
+                </button>
                 <button onClick={() => handleDelete(selectedContact.id)} disabled={selectedContact.id === 'temp'} className="p-2 rounded-full transition bg-rose-600/20 hover:bg-rose-500 text-rose-500 hover:text-white disabled:opacity-50 active:scale-95">
                   <Trash2 size={15} />
                 </button>
@@ -407,6 +502,52 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
                 </button>
               </div>
             </div>
+
+            {/* VOICEMAIL DROP PANEL */}
+            {showVoicemailPanel && (
+              <div className="bg-[#111b21] border-b border-[#2a3942] p-4 z-10 shadow-inner">
+                <div className="max-w-xl mx-auto">
+                  <h3 className="text-sm font-bold text-purple-400 mb-3 flex items-center gap-2"><Mic size={14}/> Voicemail Drop — {selectedContact.name || selectedContact.phone_number}</h3>
+                  
+                  {/* Recording Controls */}
+                  <div className="flex gap-3 items-center mb-3">
+                    {!isRecording ? (
+                      <button onClick={startRecording} className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition active:scale-95 shadow">
+                        <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span> Record New
+                      </button>
+                    ) : (
+                      <button onClick={stopRecording} className="flex items-center gap-2 bg-neutral-700 hover:bg-neutral-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition active:scale-95 animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-rose-500"></span> Stop Recording
+                      </button>
+                    )}
+                    {recordedUrl && (
+                      <audio controls src={recordedUrl} className="h-8 flex-1 max-w-[220px]" />
+                    )}
+                    {recordedBlob && (
+                      <button onClick={handleSaveAndDrop} disabled={!!dropStatus && dropStatus !== 'error'} className="ml-auto flex items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold transition active:scale-95 shadow">
+                        {dropStatus === 'uploading' ? '⬆️ Uploading...' : dropStatus === 'dropping' ? '📞 Dropping...' : dropStatus === 'done' ? '✅ Dropped!' : '📤 Save & Drop'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Saved Voicemails Library */}
+                  {savedVoicemails.length > 0 && (
+                    <div>
+                      <p className="text-[10px] text-neutral-500 uppercase tracking-widest font-bold mb-2">Saved Library</p>
+                      <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                        {savedVoicemails.map(vm => (
+                          <div key={vm.path} className="flex items-center gap-2 bg-[#202c33] border border-[#2a3942] rounded-lg p-2">
+                            <audio controls src={vm.url} className="h-7 flex-1 min-w-0" />
+                            <button onClick={() => uploadAndDrop(vm.url)} disabled={dropStatus === 'dropping'} className="shrink-0 bg-purple-600/30 hover:bg-purple-600 text-purple-300 hover:text-white px-3 py-1 rounded-md text-xs font-bold transition">Drop</button>
+                            <button onClick={() => deleteVoicemail(vm.path)} className="shrink-0 text-rose-500/50 hover:text-rose-400 p-1"><Trash2 size={13}/></button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 relative z-10">

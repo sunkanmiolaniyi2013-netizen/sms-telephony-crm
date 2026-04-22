@@ -154,6 +154,77 @@ app.get('/api/admin/users', async (req, res) => {
     res.json(profiles);
 });
 
+// ==============================================================
+// VOICEMAIL ENDPOINTS
+// ==============================================================
+const audioUpload = multer({ storage: multer.memoryStorage() });
+
+app.post('/api/voicemail/upload', audioUpload.single('audio'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No audio file received' });
+        const filename = `voicemails/${req.user.id}/${Date.now()}.webm`;
+        const { error: uploadError } = await db.storage
+            .from('voicemails')
+            .upload(filename, req.file.buffer, { contentType: req.file.mimetype || 'audio/webm', upsert: false });
+        if (uploadError) return res.status(500).json({ error: uploadError.message });
+        const { data: urlData } = db.storage.from('voicemails').getPublicUrl(filename);
+        res.json({ url: urlData.publicUrl, path: filename });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/voicemail/list', async (req, res) => {
+    const { data, error } = await db.storage.from('voicemails').list(`voicemails/${req.user.id}`, { sortBy: { column: 'created_at', order: 'desc' } });
+    if (error) return res.json([]);
+    const files = (data || []).map(f => {
+        const path = `voicemails/${req.user.id}/${f.name}`;
+        const { data: u } = db.storage.from('voicemails').getPublicUrl(path);
+        return { name: f.name, url: u.publicUrl, path, created_at: f.created_at };
+    });
+    res.json(files);
+});
+
+app.delete('/api/voicemail/file', async (req, res) => {
+    const { path } = req.body;
+    if (!path) return res.status(400).json({ error: 'Missing path' });
+    await db.storage.from('voicemails').remove([path]);
+    res.json({ success: true });
+});
+
+app.post('/api/voicemail/drop', async (req, res) => {
+    let { to, voicemail_url, from_number } = req.body;
+    if (!to || !voicemail_url) return res.status(400).json({ error: 'Missing to or voicemail_url' });
+    let cleanTo = to.replace(/[^\d+]/g, '');
+    if (cleanTo && !cleanTo.startsWith('+')) cleanTo = cleanTo.length === 10 ? '+1' + cleanTo : '+' + cleanTo;
+    const { data: pools } = await db.from('user_phone_numbers').select('phone_number').eq('user_id', req.user.id);
+    const fromNumber = from_number || (pools && pools.length > 0 ? pools[0].phone_number : twilioNumber);
+    const host = `${req.protocol}://${req.get('host')}`;
+    const encodedUrl = encodeURIComponent(voicemail_url);
+    const twimlUrl = `${host}/webhooks/voicemail-play?vm=${encodedUrl}`;
+    try {
+        const call = await twilioClient.calls.create({
+            to: cleanTo, from: fromNumber,
+            url: twimlUrl,
+            machineDetection: 'DetectMessageEnd',
+            asyncAmd: 'true',
+            asyncAmdStatusCallback: twimlUrl,
+        });
+        res.json({ success: true, callSid: call.sid });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/webhooks/voicemail-play', express.urlencoded({ extended: true }), (req, res) => {
+    const vmUrl = req.query.vm;
+    const answeredBy = req.body.AnsweredBy;
+    console.log(`📞 AMD: ${answeredBy} | VM: ${vmUrl}`);
+    const twiml = new twilio.twiml.VoiceResponse();
+    if (!answeredBy || answeredBy === 'machine_end_beep' || answeredBy === 'machine_end_silence' || answeredBy === 'machine_end_other' || answeredBy === 'unknown') {
+        if (vmUrl) twiml.play(decodeURIComponent(vmUrl));
+        else twiml.say({ voice: 'alice' }, 'Please call back at your earliest convenience.');
+    }
+    twiml.hangup();
+    res.type('text/xml').send(twiml.toString());
+});
+
 app.post('/api/admin/assign-number', async (req, res) => {
     const { data: prof } = await db.from('profiles').select('role').eq('id', req.user.id).single();
     if (prof?.role !== 'admin') return res.status(403).json({ error: 'Unauthorized' });
