@@ -50,6 +50,8 @@ function WorkspaceApp({ session, accessToken }) {
   const [activeTab, setActiveTab] = useState('inbox');
   const [role, setRole] = useState('agent');
   const [senders, setSenders] = useState([]);
+  
+  const [inboxSelectedContact, setInboxSelectedContact] = useState(null);
 
   // Telephony State
   const deviceRef = useRef(null);
@@ -189,9 +191,9 @@ function WorkspaceApp({ session, accessToken }) {
 
       {/* MAIN CONTENT AREA */}
       <div className={`flex-1 flex overflow-hidden ${activeCall ? 'pt-[68px] md:pt-[88px]' : ''}`}>
-        {activeTab === 'inbox' && <InboxTab senders={senders} callStatus={callStatus} makeCall={makeCall} />}
+        {activeTab === 'inbox' && <InboxTab senders={senders} callStatus={callStatus} makeCall={makeCall} selectedContact={inboxSelectedContact} setSelectedContact={setInboxSelectedContact} />}
         {activeTab === 'admin' && role === 'admin' && <AdminTab />}
-        {activeTab === 'leads' && <LeadsTab />}
+        {activeTab === 'leads' && <LeadsTab handleRouteToInbox={(c) => { setInboxSelectedContact(c); setActiveTab('inbox'); }} />}
         {activeTab === 'campaigns' && <CampaignsTab senders={senders} />}
       </div>
 
@@ -222,9 +224,8 @@ function WorkspaceApp({ session, accessToken }) {
 // ==============================================================
 // 1. INBOX TAB
 // ==============================================================
-const InboxTab = ({ senders, callStatus, makeCall }) => {
+const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedContact }) => {
   const [contacts, setContacts] = useState([]);
-  const [selectedContact, setSelectedContact] = useState(null);
   const [messages, setMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
   const [overrideSender, setOverrideSender] = useState(''); // sticky override
@@ -483,11 +484,14 @@ const InboxTab = ({ senders, callStatus, makeCall }) => {
 // ==============================================================
 // 2. LEADS TAB (CSV Uploads)
 // ==============================================================
-const LeadsTab = () => {
+const LeadsTab = ({ handleRouteToInbox }) => {
     const [lists, setLists] = useState([]);
     const [file, setFile] = useState(null);
     const [listName, setListName] = useState('');
     const [uploading, setUploading] = useState(false);
+    
+    const [viewingList, setViewingList] = useState(null);
+    const [listContacts, setListContacts] = useState([]);
 
     const fetchLists = () => authFetch(`${API_BASE}/lists`).then(r=>r.json()).then(setLists).catch(()=>{});
     useEffect(() => { fetchLists(); }, []);
@@ -505,13 +509,27 @@ const LeadsTab = () => {
         }).catch(err => { console.error(err); setUploading(false); });
     };
 
+    const handleDeleteList = async (id, e) => {
+        e.stopPropagation();
+        if(!window.confirm('Delete list? This permanently unmaps the targets from this specific list definition and cancels their queue routines.')) return;
+        await authFetch(`${API_BASE}/lists/${id}`, { method: 'DELETE' });
+        if (viewingList?.id === id) setViewingList(null);
+        fetchLists();
+    };
+
+    const handleViewLeads = async (list) => {
+        setViewingList(list);
+        setListContacts([]);
+        authFetch(`${API_BASE}/lists/${list.id}/contacts`).then(r => r.json()).then(setListContacts).catch(()=>{});
+    };
+
     return (
         <div className="flex-1 flex flex-col bg-[#111b21] relative ${(activeCall && activeTab !== 'campaigns') ? 'pt-[88px]' : ''}">
             <div className="h-20 border-b border-[#222d34] flex items-center px-10 bg-[#111b21] shrink-0 sticky top-0 z-20">
                <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent flex items-center gap-3"><Users size={28} className="text-emerald-400" /> Lead Storage</h1>
             </div>
             
-            <div className="flex-1 p-10 overflow-y-auto max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="flex-1 p-10 overflow-y-auto max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-8 relative">
                 <div className="lg:col-span-1 bg-[#202c33] rounded-2xl p-6 h-fit border border-[#2a3942] shadow-xl">
                     <h2 className="text-lg font-semibold mb-6 flex items-center gap-2 text-neutral-200"><UploadCloud className="text-blue-400" size={20}/> Import Leads (CSV)</h2>
                     <form onSubmit={handleUpload} className="flex flex-col gap-5">
@@ -537,14 +555,22 @@ const LeadsTab = () => {
                     <h2 className="text-lg font-semibold mb-6 text-neutral-200">Your Lists</h2>
                     <div className="space-y-4">
                         {lists.map(list => (
-                            <div key={list.id} className="bg-[#202c33] border border-[#2a3942] rounded-xl p-5 flex justify-between items-center shadow-md">
+                            <div key={list.id} className="bg-[#202c33] border border-[#2a3942] rounded-xl p-5 flex justify-between items-center shadow-md group hover:border-[#3a4f5c] transition-colors">
                                 <div>
                                     <h3 className="font-bold text-neutral-100 text-lg mb-1">{list.name}</h3>
                                     <p className="text-xs text-neutral-500 font-mono tracking-wider">{new Date(list.created_at).toLocaleDateString()}</p>
                                 </div>
-                                <div className="bg-[#111b21] border border-[#2a3942] px-4 py-2 rounded-lg flex flex-col items-center justify-center">
-                                    <span className="text-blue-400 font-bold text-lg">{list.lead_count || 0}</span>
-                                    <span className="text-[9px] uppercase text-neutral-500 font-semibold tracking-widest">Leads</span>
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-[#111b21] border border-[#2a3942] px-4 py-2 rounded-lg flex flex-col items-center justify-center mr-2">
+                                        <span className="text-blue-400 font-bold text-lg">{list.lead_count || 0}</span>
+                                        <span className="text-[9px] uppercase text-neutral-500 font-semibold tracking-widest">Leads</span>
+                                    </div>
+                                    <button onClick={(e) => { e.stopPropagation(); handleViewLeads(list); }} className="text-blue-400 hover:text-blue-300 p-2.5 border border-[#2a3942] hover:border-blue-500/50 rounded-lg transition-colors flex items-center justify-center bg-[#111b21] shadow-sm active:scale-95" title="View Leads Array">
+                                        <Users size={16} />
+                                    </button>
+                                    <button onClick={(e) => handleDeleteList(list.id, e)} className="text-rose-500 hover:text-rose-400 p-2.5 border border-[#2a3942] hover:border-rose-500/50 rounded-lg transition-colors flex items-center justify-center bg-[#111b21] shadow-sm active:scale-95 opacity-0 group-hover:opacity-100" title="Permanently Delete List">
+                                        <Trash2 size={16} />
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -552,6 +578,43 @@ const LeadsTab = () => {
                     </div>
                 </div>
             </div>
+
+            {/* VIEW LEADS OVERLAY MODAL */}
+            {viewingList && (
+                <div className="fixed inset-0 z-50 bg-[#0b141a]/90 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-[#111b21] border border-[#2a3942] rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-5 border-b border-[#2a3942] flex justify-between items-center bg-[#202c33]">
+                           <div>
+                               <h2 className="text-lg font-bold text-white flex items-center gap-2"><Users size={20} className="text-blue-400"/> {viewingList.name}</h2>
+                               <p className="text-xs text-neutral-400 mt-1 font-mono">Found {listContacts.length} extracted contacts</p>
+                           </div>
+                           <button onClick={()=>setViewingList(null)} className="text-neutral-500 hover:text-white p-2 transition text-2xl leading-none">&times;</button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2 relative">
+                            {listContacts.length === 0 ? (
+                                <div className="text-center p-10 text-neutral-500 text-sm flex flex-col items-center">
+                                    <span className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-4"></span>
+                                    Loading extracted grid arrays...
+                                </div>
+                            ) : (
+                                listContacts.map(c => (
+                                    <div key={c.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-[#202c33] border border-[#2a3942] rounded-xl hover:border-[#3a4f5c] transition-colors gap-3 scroll-m-2">
+                                        <div className="min-w-0 flex-1 w-full">
+                                            <p className="font-bold text-neutral-200 text-lg sm:text-base font-mono">{c.phone_number}</p>
+                                            <p className="text-[10px] sm:text-xs text-emerald-500/80 mt-1 truncate max-w-full font-mono bg-[#111b21] p-1.5 rounded inline-block border border-[#2a3942]/60">
+                                                {c.custom_variables && c.custom_variables !== '{}' ? c.custom_variables : 'No variables injected'}
+                                            </p>
+                                        </div>
+                                        <button onClick={() => { setViewingList(null); handleRouteToInbox(c); }} className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold rounded-lg shadow-md transition-all active:scale-95 flex items-center justify-center gap-2">
+                                           <MessageCircle size={16} /> Msg
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

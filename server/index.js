@@ -189,6 +189,21 @@ app.get('/api/lists', async (req, res) => {
     res.json(enriched);
 });
 
+app.delete('/api/lists/:id', async (req, res) => {
+    // Cascade-clean mappings and linked sequence campaigns smoothly
+    await db.from('campaigns').delete().eq('list_id', req.params.id);
+    await db.from('lead_lists_mapping').delete().eq('list_id', req.params.id);
+    const { error } = await db.from('lead_lists').delete().eq('id', req.params.id).eq('user_id', req.user.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+});
+
+app.get('/api/lists/:id/contacts', async (req, res) => {
+   const { data, error } = await db.from('lead_lists_mapping').select('contacts(*)').eq('list_id', req.params.id);
+   if (error) return res.status(500).json({ error: error.message });
+   res.json((data || []).map(d => d.contacts).filter(Boolean));
+});
+
 app.get('/api/lists/:id/columns', async (req, res) => {
     const { data, error } = await db.from('lead_lists_mapping')
            .select('contacts(custom_variables)')
