@@ -275,14 +275,20 @@ const InboxTab = ({ senders, callStatus, makeCall }) => {
     setMessageInput('');
     setShowOverrideWarning(false);
     
-    setMessages(prev => [...prev, { id: Date.now(), direction: 'outbound', content: payload.content, created_at: new Date().toISOString() }]);
+    const tempId = Date.now();
+    setMessages(prev => [...prev, { id: tempId, direction: 'outbound', content: payload.content, created_at: new Date().toISOString() }]);
 
     const res = await authFetch(`${API_BASE}/messages/send`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const json = await res.json();
     if (json.error) {
        alert("Failed to send message: " + json.error);
        // Remove optimistic message on failure
-       setMessages(prev => prev.filter(m => m.id !== Date.now()));
+       setMessages(prev => prev.filter(m => m.id !== tempId));
+    } else if (json.contactId) {
+       // Auto-resolve temporary or fallback references to strictly lock onto DB index
+       if (selectedContact.id === 'temp' || selectedContact.id !== json.contactId) {
+           setSelectedContact(prev => ({ ...prev, id: json.contactId }));
+       }
     }
     loadData();
   };

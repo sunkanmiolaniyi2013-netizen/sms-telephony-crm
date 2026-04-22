@@ -65,10 +65,22 @@ app.delete('/api/contacts/:id', async (req, res) => {
 app.post('/api/messages/send', async (req, res) => {
   let { to, content, override_from } = req.body;
   if (!to || !content) return res.status(400).json({ error: 'Missing to or content' });
-  // Normalize the destination number (user may type +1 (408) 123-4567)
-  to = to.replace(/[^\d+]/g, '');
   
-  const { data: row } = await db.from('contacts').select('*').eq('phone_number', to).eq('user_id', req.user.id).single();
+  const originalTo = to;
+  let cleanTo = to.replace(/[^\d+]/g, '');
+  if (cleanTo && !cleanTo.startsWith('+')) cleanTo = '+' + cleanTo;
+
+  // Search by either format, fetching the most recently updated if multiple exist
+  const { data: matchRows } = await db.from('contacts')
+      .select('*')
+      .in('phone_number', [originalTo, cleanTo, to])
+      .eq('user_id', req.user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+      
+  const row = (matchRows && matchRows.length > 0) ? matchRows[0] : null;
+  to = cleanTo; // Use clean version for Twilio
+  
   let fromNumber = twilioNumber;
   const { data: pools } = await db.from('user_phone_numbers').select('phone_number').eq('user_id', req.user.id);
   if (pools && pools.length > 0) fromNumber = pools[0].phone_number;
@@ -109,7 +121,7 @@ app.post('/api/messages/send', async (req, res) => {
         });
     }
 
-    res.json({ success: true, sid: message.sid });
+    res.json({ success: true, sid: message.sid, contactId: contactId });
   } catch (error) {
     console.error('Twilio Send Error:', error);
     res.status(500).json({ error: error.message });
@@ -455,11 +467,19 @@ app.post('/api/webhooks/incoming-sms', async (req, res) => {
   }
 
   if (user_id) {
-      const { data: contact } = await db.from('contacts').select('id').eq('phone_number', cleanFrom).eq('user_id', user_id).single();
-      let contact_id = contact?.id;
+      // Robust lookup allowing for E.164 Twilio incoming matches against loose CRM imported formats
+      const { data: matchRows } = await db.from('contacts')
+          .select('id')
+          .in('phone_number', [From, cleanFrom])
+          .eq('user_id', user_id)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+          
+      let contact_id = (matchRows && matchRows.length > 0) ? matchRows[0].id : null;
+      
       if (!contact_id) {
           const { data: newContact, error } = await db.from('contacts').insert({
-              user_id, phone_number: cleanFrom, last_message: Body, assigned_sender_number: cleanTo
+              user_id, phone_number: cleanFrom, last_message: Body, assigned_sender_number: cleanTo, updated_at: new Date().toISOString()
           }).select('id').single();
           if (!error) contact_id = newContact?.id;
       } else {
