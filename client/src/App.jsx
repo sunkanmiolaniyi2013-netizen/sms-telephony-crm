@@ -749,7 +749,7 @@ const CampaignsTab = ({ senders }) => {
                                            
                                            {listColumns.length > 0 ? (
                                               <div className="mt-1 flex gap-1.5 overflow-x-auto pb-1 border-t border-[#2a3942]/40 pt-2">
-                                                <span className="text-[9px] text-emerald-500/70 uppercase tracking-widest font-bold flex items-center shrink-0">Inject {{CSV}}:</span>
+                                                <span className="text-[9px] text-emerald-500/70 uppercase tracking-widest font-bold flex items-center shrink-0">{'Inject {{Col}}:'}</span>
                                                 {listColumns.map(col => (
                                                   <button type="button" key={col} onClick={() => updateStep(i, 'content', st.content + (st.content.endsWith(' ') || st.content==='' ? '' : ' ') + `{{${col}}}`)} className="text-[10px] bg-[#111b21] border border-[#2a3942] hover:border-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400 px-2 py-1 rounded-md text-neutral-400 whitespace-nowrap transition-all shadow-sm">
                                                     {col}
