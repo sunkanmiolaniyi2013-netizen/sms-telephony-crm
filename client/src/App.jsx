@@ -268,19 +268,74 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
 
+  const smsRingtoneRef = useRef(null); // holds the stop function for the current ringtone
+
   const playDing = () => {
+    // Stop any previous SMS ringtone first
+    if (smsRingtoneRef.current) { smsRingtoneRef.current(); smsRingtoneRef.current = null; }
+
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.setValueAtTime(660, ctx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.4, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
-      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.6);
+
+      // 4-note ascending chime melody: C5 → E5 → G5 → C6 (bright, soft, distinct from call ring)
+      const notes = [523.25, 659.25, 783.99, 1046.50];
+      const noteDuration = 0.18;   // each note length (s)
+      const noteGap = 0.04;        // silence between notes
+      const cycleLength = notes.length * (noteDuration + noteGap); // ~0.88s per melody play
+      const pauseBetweenCycles = 2.2; // gap between repeating the melody
+      const maxDuration = 20;   // auto-stop after 20 seconds
+
+      let stopped = false;
+      let cycleTimeout = null;
+
+      const playCycle = (startTime) => {
+        if (stopped) return;
+        notes.forEach((freq, i) => {
+          const t = startTime + i * (noteDuration + noteGap);
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.35, t + 0.02);
+          gain.gain.setValueAtTime(0.35, t + noteDuration - 0.04);
+          gain.gain.linearRampToValueAtTime(0, t + noteDuration);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(t); osc.stop(t + noteDuration + 0.05);
+        });
+      };
+
+      const scheduleNext = (cycleNum) => {
+        if (stopped) return;
+        const elapsed = cycleNum * (cycleLength + pauseBetweenCycles);
+        if (elapsed >= maxDuration) { ctx.close(); return; }
+        playCycle(ctx.currentTime + (cycleNum === 0 ? 0 : 0));
+        cycleTimeout = setTimeout(() => scheduleNext(cycleNum + 1), (cycleLength + pauseBetweenCycles) * 1000);
+      };
+
+      scheduleNext(0);
+
+      // Return a stop function stored in the ref
+      const stop = () => {
+        stopped = true;
+        if (cycleTimeout) clearTimeout(cycleTimeout);
+        try { ctx.close(); } catch(e) {}
+      };
+      smsRingtoneRef.current = stop;
+
+      // Auto-stop after maxDuration
+      setTimeout(() => { if (smsRingtoneRef.current === stop) { stop(); smsRingtoneRef.current = null; } }, maxDuration * 1000);
+
     } catch(e) {}
   };
+
+  // Stop ringtone on any user interaction with the page
+  useEffect(() => {
+    const stopOnInteract = () => { if (smsRingtoneRef.current) { smsRingtoneRef.current(); smsRingtoneRef.current = null; } };
+    window.addEventListener('click', stopOnInteract);
+    window.addEventListener('keydown', stopOnInteract);
+    return () => { window.removeEventListener('click', stopOnInteract); window.removeEventListener('keydown', stopOnInteract); };
+  }, []);
 
   const fetchSavedVoicemails = () =>
     authFetch(`${API_BASE}/voicemail/list`).then(r => r.json()).then(d => setSavedVoicemails(Array.isArray(d) ? d : [])).catch(() => {});
