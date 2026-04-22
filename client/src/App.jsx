@@ -15,6 +15,26 @@ const authFetch = async (url, options = {}) => {
   return fetch(url, { ...options, headers });
 };
 
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('Tab crashed:', error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-[#111b21]">
+          <div className="text-center p-10 bg-[#202c33] rounded-2xl border border-rose-500/30 max-w-md">
+            <p className="text-rose-400 font-bold text-lg mb-2">Something went wrong</p>
+            <p className="text-neutral-400 text-sm mb-6">{this.state.error?.message || 'An unexpected error occurred'}</p>
+            <button onClick={() => this.setState({ hasError: false, error: null })} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg text-sm font-bold transition">Try Again</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // --- MAIN WRAPPER ---
 export default function App() {
   const [session, setSession] = useState(null);
@@ -191,10 +211,10 @@ function WorkspaceApp({ session, accessToken }) {
 
       {/* MAIN CONTENT AREA */}
       <div className={`flex-1 flex overflow-hidden ${activeCall ? 'pt-[68px] md:pt-[88px]' : ''}`}>
-        {activeTab === 'inbox' && <InboxTab senders={senders} callStatus={callStatus} makeCall={makeCall} selectedContact={inboxSelectedContact} setSelectedContact={setInboxSelectedContact} />}
-        {activeTab === 'admin' && role === 'admin' && <AdminTab />}
-        {activeTab === 'leads' && <LeadsTab handleRouteToInbox={(c) => { setInboxSelectedContact(c); setActiveTab('inbox'); }} />}
-        {activeTab === 'campaigns' && <CampaignsTab senders={senders} />}
+        {activeTab === 'inbox' && <ErrorBoundary><InboxTab senders={senders} callStatus={callStatus} makeCall={makeCall} selectedContact={inboxSelectedContact} setSelectedContact={setInboxSelectedContact} /></ErrorBoundary>}
+        {activeTab === 'admin' && role === 'admin' && <ErrorBoundary><AdminTab /></ErrorBoundary>}
+        {activeTab === 'leads' && <ErrorBoundary><LeadsTab handleRouteToInbox={(c) => { setInboxSelectedContact(c); setActiveTab('inbox'); }} /></ErrorBoundary>}
+        {activeTab === 'campaigns' && <ErrorBoundary><CampaignsTab senders={senders} /></ErrorBoundary>}
       </div>
 
       {/* MOBILE BOTTOM NAV — visible only on mobile */}
@@ -642,7 +662,10 @@ const CampaignsTab = ({ senders }) => {
         if (!cList) {
             setListColumns([]); return;
         }
-        authFetch(`${API_BASE}/lists/${cList}/columns`).then(r => r.json()).then(cols => setListColumns(cols || [])).catch(() => {});
+        authFetch(`${API_BASE}/lists/${cList}/columns`)
+            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+            .then(cols => setListColumns(Array.isArray(cols) ? cols : []))
+            .catch(() => setListColumns([]));
     }, [cList]);
 
     const toggleSender = (num) => {
