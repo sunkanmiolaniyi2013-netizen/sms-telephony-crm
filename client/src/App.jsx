@@ -708,6 +708,10 @@ const LeadsTab = ({ handleRouteToInbox }) => {
     
     const [viewingList, setViewingList] = useState(null);
     const [listContacts, setListContacts] = useState([]);
+    
+    // Batch Selection State
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [isPushing, setIsPushing] = useState(false);
 
     const fetchLists = () => authFetch(`${API_BASE}/lists`).then(r=>r.json()).then(setLists).catch(()=>{});
     useEffect(() => { fetchLists(); }, []);
@@ -736,7 +740,46 @@ const LeadsTab = ({ handleRouteToInbox }) => {
     const handleViewLeads = async (list) => {
         setViewingList(list);
         setListContacts([]);
+        setSelectedIds(new Set());
         authFetch(`${API_BASE}/lists/${list.id}/contacts`).then(r => r.json()).then(setListContacts).catch(()=>{});
+    };
+
+    const toggleSelection = (id) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.size === listContacts.filter(c => !c.last_message).length) {
+            setSelectedIds(new Set()); // Deselect all
+        } else {
+            // Select only those that don't already have a last_message
+            setSelectedIds(new Set(listContacts.filter(c => !c.last_message).map(c => c.id)));
+        }
+    };
+
+    const handlePushToInbox = async () => {
+        if (selectedIds.size === 0) return;
+        setIsPushing(true);
+        const res = await authFetch(`${API_BASE}/contacts/push-to-inbox`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contact_ids: Array.from(selectedIds) })
+        });
+        const data = await res.json();
+        setIsPushing(false);
+        if (data.error) {
+            alert('Failed to push: ' + data.error);
+        } else {
+            // Refresh contacts locally to show them as pushed
+            setListContacts(prev => prev.map(c => selectedIds.has(c.id) ? { ...c, last_message: '[ Added to Inbox ]' } : c));
+            setSelectedIds(new Set());
+            alert('Successfully pushed to Inbox!');
+        }
     };
 
     return (
@@ -804,8 +847,27 @@ const LeadsTab = ({ handleRouteToInbox }) => {
                                <h2 className="text-lg font-bold text-white flex items-center gap-2"><Users size={20} className="text-blue-400"/> {viewingList.name}</h2>
                                <p className="text-xs text-neutral-400 mt-1 font-mono">Found {listContacts.length} extracted contacts</p>
                            </div>
-                           <button onClick={()=>setViewingList(null)} className="text-neutral-500 hover:text-white p-2 transition text-2xl leading-none">&times;</button>
+                           <div className="flex items-center gap-3">
+                               {selectedIds.size > 0 && (
+                                   <button onClick={handlePushToInbox} disabled={isPushing} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition-all active:scale-95 flex items-center gap-2">
+                                       {isPushing ? 'Pushing...' : `Push ${selectedIds.size} to Inbox`} <MessageCircle size={16} />
+                                   </button>
+                               )}
+                               <button onClick={()=>setViewingList(null)} className="text-neutral-500 hover:text-white p-2 transition text-2xl leading-none">&times;</button>
+                           </div>
                         </div>
+                        
+                        {listContacts.length > 0 && (
+                            <div className="bg-[#111b21] px-6 py-3 border-b border-[#2a3942] flex items-center gap-4">
+                                <input 
+                                    type="checkbox" 
+                                    className="w-4 h-4 rounded border-neutral-600 accent-blue-500 cursor-pointer"
+                                    checked={listContacts.length > 0 && selectedIds.size === listContacts.filter(c => !c.last_message).length && listContacts.filter(c => !c.last_message).length > 0}
+                                    onChange={toggleSelectAll}
+                                />
+                                <span className="text-xs text-neutral-400 uppercase tracking-widest font-semibold">Select All Unpushed</span>
+                            </div>
+                        )}
                         <div className="flex-1 overflow-y-auto p-4 space-y-2 relative">
                             {listContacts.length === 0 ? (
                                 <div className="text-center p-10 text-neutral-500 text-sm flex flex-col items-center">
@@ -814,14 +876,26 @@ const LeadsTab = ({ handleRouteToInbox }) => {
                                 </div>
                             ) : (
                                 listContacts.map(c => (
-                                    <div key={c.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-[#202c33] border border-[#2a3942] rounded-xl hover:border-[#3a4f5c] transition-colors gap-3 scroll-m-2">
-                                        <div className="min-w-0 flex-1 w-full">
-                                            <p className="font-bold text-neutral-200 text-lg sm:text-base font-mono">{c.phone_number}</p>
-                                            <p className="text-[10px] sm:text-xs text-emerald-500/80 mt-1 truncate max-w-full font-mono bg-[#111b21] p-1.5 rounded inline-block border border-[#2a3942]/60">
-                                                {c.custom_variables && c.custom_variables !== '{}' ? c.custom_variables : 'No variables injected'}
-                                            </p>
+                                    <div key={c.id} className={`flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-[#202c33] border rounded-xl transition-colors gap-3 scroll-m-2 ${selectedIds.has(c.id) ? 'border-blue-500 bg-blue-900/10' : 'border-[#2a3942] hover:border-[#3a4f5c]'}`}>
+                                        <div className="flex items-center gap-4 w-full sm:w-auto">
+                                            <input 
+                                                type="checkbox" 
+                                                className="w-4 h-4 rounded border-neutral-600 accent-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                                checked={selectedIds.has(c.id)}
+                                                disabled={!!c.last_message}
+                                                onChange={() => toggleSelection(c.id)}
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <p className="font-bold text-neutral-200 text-lg sm:text-base font-mono">{c.phone_number}</p>
+                                                    {c.last_message && <span className="text-[9px] bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded font-semibold uppercase tracking-widest">In Inbox</span>}
+                                                </div>
+                                                <p className="text-[10px] sm:text-xs text-emerald-500/80 truncate max-w-full font-mono bg-[#111b21] p-1.5 rounded inline-block border border-[#2a3942]/60">
+                                                    {c.custom_variables && c.custom_variables !== '{}' ? c.custom_variables : 'No variables injected'}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <button onClick={() => { setViewingList(null); handleRouteToInbox(c); }} className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold rounded-lg shadow-md transition-all active:scale-95 flex items-center justify-center gap-2">
+                                        <button onClick={() => { setViewingList(null); handleRouteToInbox(c); }} className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-sm font-bold rounded-lg shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 shrink-0">
                                            <MessageCircle size={16} /> Msg
                                         </button>
                                     </div>

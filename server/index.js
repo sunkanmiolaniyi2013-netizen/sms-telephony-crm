@@ -62,6 +62,22 @@ app.delete('/api/contacts/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/contacts/push-to-inbox', async (req, res) => {
+  const { contact_ids } = req.body;
+  if (!contact_ids || !Array.isArray(contact_ids) || contact_ids.length === 0) {
+      return res.status(400).json({ error: 'Missing contact_ids' });
+  }
+  
+  // Set last_message to a placeholder so it appears in the inbox list
+  const { error } = await db.from('contacts')
+      .update({ last_message: '[ Added to Inbox ]', updated_at: new Date().toISOString() })
+      .in('id', contact_ids)
+      .eq('user_id', req.user.id);
+      
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
 app.post('/api/messages/send', async (req, res) => {
   let { to, content, override_from } = req.body;
   if (!to || !content) return res.status(400).json({ error: 'Missing to or content' });
@@ -582,9 +598,18 @@ app.post('/api/webhooks/incoming-sms', async (req, res) => {
 
   if (user_id) {
       // Robust lookup allowing for E.164 Twilio incoming matches against loose CRM imported formats
+      let searchVariants = [From, cleanFrom];
+      if (cleanFrom.startsWith('+1') && cleanFrom.length === 12) {
+          const last10 = cleanFrom.substring(2);
+          searchVariants.push(last10);
+          searchVariants.push(`1${last10}`);
+          searchVariants.push(`(${last10.substring(0,3)}) ${last10.substring(3,6)}-${last10.substring(6)}`);
+          searchVariants.push(`${last10.substring(0,3)}-${last10.substring(3,6)}-${last10.substring(6)}`);
+      }
+
       const { data: matchRows } = await db.from('contacts')
           .select('id')
-          .in('phone_number', [From, cleanFrom])
+          .in('phone_number', searchVariants)
           .eq('user_id', user_id)
           .order('updated_at', { ascending: false })
           .limit(1);
