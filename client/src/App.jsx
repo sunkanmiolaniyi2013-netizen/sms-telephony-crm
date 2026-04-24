@@ -258,6 +258,10 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
   const prevContactId = useRef(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Bulk Delete State
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedForDeletion, setSelectedForDeletion] = useState(new Set());
+
   // Voicemail Drop state
   const [showVoicemailPanel, setShowVoicemailPanel] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -472,33 +476,92 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
       }
   };
 
+  const handleBatchDelete = async () => {
+      if (selectedForDeletion.size === 0) return;
+      if (window.confirm(`WARNING: Are you sure you want to permanently delete ${selectedForDeletion.size} contacts and all associated chat logs? This cannot be undone.`)) {
+          const res = await authFetch(`${API_BASE}/contacts/batch-delete`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contact_ids: Array.from(selectedForDeletion) })
+          });
+          const data = await res.json();
+          if (data.error) {
+              alert('Failed to delete: ' + data.error);
+          } else {
+              if (selectedContact && selectedForDeletion.has(selectedContact.id)) {
+                  setSelectedContact(null);
+              }
+              setSelectedForDeletion(new Set());
+              setIsSelectionMode(false);
+              loadData();
+          }
+      }
+  };
+
+  const toggleContactSelection = (id, e) => {
+      e.stopPropagation();
+      setSelectedForDeletion(prev => {
+          const next = new Set(prev);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          return next;
+      });
+  };
+
+  const toggleSelectAllContacts = () => {
+      if (selectedForDeletion.size === contacts.length) {
+          setSelectedForDeletion(new Set());
+      } else {
+          setSelectedForDeletion(new Set(contacts.map(c => c.id)));
+      }
+  };
+
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* CONTACT LIST — hidden on mobile when a contact is selected */}
       <div className={`${selectedContact ? 'hidden md:flex' : 'flex'} w-full md:w-80 bg-[#111b21] border-r border-[#222d34] flex-col relative z-20`}>
-        <div className="p-4 border-b border-[#222d34] flex justify-between items-center">
-          <h1 className="text-lg font-bold text-neutral-100 flex items-center gap-2"><MessageCircle size={20} className="text-blue-500"/> Inbox</h1>
-          <div className="flex gap-2">
-            <button onClick={() => setSoundEnabled(s => !s)} title={soundEnabled ? 'Mute SMS sounds' : 'Enable SMS sounds'} className={`p-2 rounded-full transition text-sm h-8 w-8 flex items-center justify-center ${soundEnabled ? 'bg-emerald-700/30 text-emerald-400 hover:bg-emerald-700/50' : 'bg-neutral-800 text-neutral-500 hover:bg-neutral-700'}`}>
-              {soundEnabled ? '🔔' : '🔕'}
-            </button>
-            <button onClick={() => setShowDialer(!showDialer)} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 p-2 rounded-full transition shadow h-8 w-8 flex items-center justify-center"><Plus size={16} /></button>
+        <div className="p-4 border-b border-[#222d34] flex flex-col gap-3">
+          <div className="flex justify-between items-center">
+            <h1 className="text-lg font-bold text-neutral-100 flex items-center gap-2"><MessageCircle size={20} className="text-blue-500"/> Inbox</h1>
+            <div className="flex gap-2">
+              <button onClick={() => { setIsSelectionMode(!isSelectionMode); setSelectedForDeletion(new Set()); }} title={isSelectionMode ? 'Cancel Selection' : 'Batch Delete'} className={`p-2 rounded-full transition text-sm h-8 w-8 flex items-center justify-center ${isSelectionMode ? 'bg-rose-700/30 text-rose-400 hover:bg-rose-700/50' : 'bg-neutral-800 text-neutral-500 hover:bg-neutral-700'}`}>
+                <Trash2 size={16} />
+              </button>
+              <button onClick={() => setSoundEnabled(s => !s)} title={soundEnabled ? 'Mute SMS sounds' : 'Enable SMS sounds'} className={`p-2 rounded-full transition text-sm h-8 w-8 flex items-center justify-center ${soundEnabled ? 'bg-emerald-700/30 text-emerald-400 hover:bg-emerald-700/50' : 'bg-neutral-800 text-neutral-500 hover:bg-neutral-700'}`}>
+                {soundEnabled ? '🔔' : '🔕'}
+              </button>
+              <button onClick={() => setShowDialer(!showDialer)} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 p-2 rounded-full transition shadow h-8 w-8 flex items-center justify-center"><Plus size={16} /></button>
+            </div>
           </div>
+          {isSelectionMode && (
+            <div className="flex justify-between items-center bg-[#202c33] p-2 rounded-lg border border-[#2a3942] animate-in slide-in-from-top-2">
+               <div className="flex items-center gap-2">
+                 <input type="checkbox" className="w-4 h-4 rounded border-neutral-600 accent-blue-500 cursor-pointer" checked={contacts.length > 0 && selectedForDeletion.size === contacts.length} onChange={toggleSelectAllContacts} />
+                 <span className="text-xs text-neutral-400 font-semibold">{selectedForDeletion.size} Selected</span>
+               </div>
+               {selectedForDeletion.size > 0 && (
+                 <button onClick={handleBatchDelete} className="text-xs bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded font-bold shadow transition active:scale-95">Delete All</button>
+               )}
+            </div>
+          )}
         </div>
         
         <div className="flex-1 overflow-y-auto">
           {contacts.map(c => (
-            <div key={c.id} onClick={() => selectContact(c)} className={`p-4 border-b border-[#2a3942]/40 cursor-pointer active:bg-[#202c33] hover:bg-[#202c33] transition ${selectedContact?.id === c.id ? 'bg-[#2a3942] border-l-4 border-l-blue-500' : ''}`}>
+            <div key={c.id} onClick={() => !isSelectionMode && selectContact(c)} className={`p-4 border-b border-[#2a3942]/40 ${!isSelectionMode ? 'cursor-pointer active:bg-[#202c33] hover:bg-[#202c33]' : ''} transition ${selectedContact?.id === c.id && !isSelectionMode ? 'bg-[#2a3942] border-l-4 border-l-blue-500' : ''}`}>
               <div className="flex items-center gap-3">
+                {isSelectionMode && (
+                  <input type="checkbox" className="w-5 h-5 rounded border-neutral-600 accent-blue-500 cursor-pointer flex-shrink-0" checked={selectedForDeletion.has(c.id)} onChange={(e) => toggleContactSelection(c.id, e)} onClick={(e) => e.stopPropagation()} />
+                )}
                 <div className="w-11 h-11 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
                   <User size={20} className="text-white" />
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0" onClick={(e) => { if(isSelectionMode) toggleContactSelection(c.id, e) }}>
                   <div className="flex justify-between items-baseline mb-0.5">
-                    <h3 className="font-semibold text-neutral-100 truncate text-sm">{c.name || c.phone_number}</h3>
+                    <h3 className="font-semibold text-neutral-100 truncate text-sm cursor-pointer">{c.name || c.phone_number}</h3>
                     <span className="text-[10px] text-neutral-500 flex-shrink-0 ml-2">{new Date(c.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                   </div>
-                  <p className="text-xs text-neutral-400 truncate">{c.last_message}</p>
+                  <p className="text-xs text-neutral-400 truncate cursor-pointer">{c.last_message}</p>
                 </div>
               </div>
             </div>

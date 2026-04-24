@@ -62,6 +62,21 @@ app.delete('/api/contacts/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/contacts/batch-delete', async (req, res) => {
+  const { contact_ids } = req.body;
+  if (!contact_ids || !Array.isArray(contact_ids) || contact_ids.length === 0) {
+      return res.status(400).json({ error: 'Missing contact_ids' });
+  }
+  
+  const { error } = await db.from('contacts')
+      .delete()
+      .in('id', contact_ids)
+      .eq('user_id', req.user.id);
+      
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
 app.post('/api/contacts/push-to-inbox', async (req, res) => {
   const { contact_ids } = req.body;
   if (!contact_ids || !Array.isArray(contact_ids) || contact_ids.length === 0) {
