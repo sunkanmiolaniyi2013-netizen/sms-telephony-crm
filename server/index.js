@@ -62,6 +62,21 @@ app.delete('/api/contacts/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+app.get('/api/messages/poll-inbound', async (req, res) => {
+  const { since } = req.query;
+  if (!since) return res.json({ new_messages: false });
+  
+  const { data, error } = await db.from('messages')
+      .select('id')
+      .eq('user_id', req.user.id)
+      .eq('direction', 'inbound')
+      .gt('created_at', since)
+      .limit(1);
+      
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ new_messages: data && data.length > 0 });
+});
+
 app.post('/api/contacts/batch-delete', async (req, res) => {
   const { contact_ids } = req.body;
   if (!contact_ids || !Array.isArray(contact_ids) || contact_ids.length === 0) {

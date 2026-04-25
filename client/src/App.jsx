@@ -256,6 +256,7 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
 
   const prevMsgCount = useRef(0);
   const prevContactId = useRef(null);
+  const lastPollTimeRef = useRef(new Date().toISOString());
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Bulk Delete State
@@ -404,17 +405,22 @@ const InboxTab = ({ senders, callStatus, makeCall, selectedContact, setSelectedC
   }, [messages, selectedContact]);
 
   const loadData = () => {
+    // 1. Fetch contacts for sidebar
     authFetch(`${API_BASE}/contacts`).then(r => r.json()).then(data => {
-      if (!data.error) {
-        // SMS Ringtone: detect new inbound messages across all contacts
-        setContacts(prev => {
-          const prevLastMsgs = Object.fromEntries(prev.map(c => [c.id, c.updated_at]));
-          const newInbound = data.some(c => c.id && prevLastMsgs[c.id] && c.updated_at > prevLastMsgs[c.id]);
-          if (newInbound && soundEnabled && prev.length > 0) playDing();
-          return data;
-        });
-      }
+      if (!data.error) setContacts(data);
     }).catch(()=>{});
+
+    // 2. Safely poll for new inbound messages to trigger chime
+    if (soundEnabled) {
+      authFetch(`${API_BASE}/messages/poll-inbound?since=${encodeURIComponent(lastPollTimeRef.current)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.new_messages) playDing();
+          lastPollTimeRef.current = new Date().toISOString();
+        }).catch(()=>{});
+    }
+
+    // 3. Fetch active chat messages
     if (selectedContact?.id && selectedContact.id !== 'temp') {
       authFetch(`${API_BASE}/contacts/${selectedContact.id}/messages`).then(r => r.json()).then(data => !data.error && setMessages(data)).catch(()=>{});
     }
